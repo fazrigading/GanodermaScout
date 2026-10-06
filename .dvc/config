@@ -1,0 +1,4 @@
+[core]
+analytics = false
+[remote "storage"]
+url = /data/ganodermascout-dvc-remote

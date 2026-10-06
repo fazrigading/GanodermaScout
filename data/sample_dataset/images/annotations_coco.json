@@ -1,0 +1,50 @@
+{
+  "images": [
+    {
+      "file_name": "primordium_001.png",
+      "width": 640,
+      "height": 640
+    },
+    {
+      "file_name": "mature_001.png",
+      "width": 640,
+      "height": 640
+    }
+  ],
+  "annotations": [
+    {
+      "id": 1,
+      "image": "primordium_001.png",
+      "category": "primordium",
+      "category_id": 0,
+      "bbox": [
+        270,
+        420,
+        100,
+        80
+      ]
+    },
+    {
+      "id": 2,
+      "image": "mature_001.png",
+      "category": "mature_basidiocarp",
+      "category_id": 1,
+      "bbox": [
+        220,
+        380,
+        200,
+        120
+      ]
+    }
+  ],
+  "categories": [
+    {
+      "id": 0,
+      "name": "primordium"
+    },
+    {
+      "id": 1,
+      "name": "mature_basidiocarp"
+    }
+  ]
+}
