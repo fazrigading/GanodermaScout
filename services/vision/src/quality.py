@@ -38,20 +38,13 @@ def inspect_image(image_bytes: bytes) -> QualityReport:
             rejection_reason="image_too_small",
         )
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    blur_score = float(cv2.Laplacian(gray, cv2.CV_64F).var())
-    if blur_score < BLUR_THRESHOLD:
-        return QualityReport(
-            is_acceptable=False,
-            blur_score=blur_score,
-            exposure_score=1.0,
-            rejection_reason="image_blurred",
-        )
     hist, _ = np.histogram(gray, bins=256, range=(0, 256))
     total = float(hist.sum())
     dark_ratio = float(hist[:16].sum() / total)
     bright_ratio = float(hist[240:].sum() / total)
     exposure_score = float(1.0 - max(dark_ratio, bright_ratio))
     if dark_ratio > DARK_CLIP_LIMIT:
+        blur_score = float(cv2.Laplacian(gray, cv2.CV_64F).var())
         return QualityReport(
             is_acceptable=False,
             blur_score=blur_score,
@@ -59,11 +52,20 @@ def inspect_image(image_bytes: bytes) -> QualityReport:
             rejection_reason="image_underexposed",
         )
     if bright_ratio > BRIGHT_CLIP_LIMIT:
+        blur_score = float(cv2.Laplacian(gray, cv2.CV_64F).var())
         return QualityReport(
             is_acceptable=False,
             blur_score=blur_score,
             exposure_score=exposure_score,
             rejection_reason="image_overexposed",
+        )
+    blur_score = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+    if blur_score < BLUR_THRESHOLD:
+        return QualityReport(
+            is_acceptable=False,
+            blur_score=blur_score,
+            exposure_score=1.0,
+            rejection_reason="image_blurred",
         )
     return QualityReport(
         is_acceptable=True,

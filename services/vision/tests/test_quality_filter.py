@@ -43,14 +43,14 @@ def test_dark_image_rejected():
     dark = np.full((320, 320, 3), 5, dtype=np.uint8)
     report = inspect_image(encode(dark))
     assert report.is_acceptable is False
-    assert report.rejection_reason in ("image_blurred", "image_underexposed")
+    assert report.rejection_reason == "image_underexposed"
 
 
 def test_bright_image_rejected():
     bright = np.full((320, 320, 3), 250, dtype=np.uint8)
     report = inspect_image(encode(bright))
     assert report.is_acceptable is False
-    assert report.rejection_reason in ("image_blurred", "image_overexposed")
+    assert report.rejection_reason == "image_overexposed"
 
 
 def test_too_small_rejected():
