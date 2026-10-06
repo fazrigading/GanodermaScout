@@ -1,0 +1,67 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: ganodermascout-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-ganodermascout}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-ganodermascout}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ganodermascout-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: ganodermascout-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ganodermascout-net
+
+  # SeaweedFS S3-compatible store. Only started when using the "s3" profile.
+  # Example: docker compose --profile s3 up
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
+    container_name: ganodermascout-seaweedfs
+    profiles:
+      - s3
+    command: server -s3 -dir=/data -s3.port=8333
+    ports:
+      - "${S3_PORT:-8333}:8333"
+    volumes:
+      - seaweedfs_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8333/dir/status || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ganodermascout-net
+
+networks:
+  ganodermascout-net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  storage_data:
+  seaweedfs_data:
