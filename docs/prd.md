@@ -1,282 +1,337 @@
-# Product requirements document: GanodermaScout
+# Product Requirements Document: GanodermaScout
 
-- Version: 0.1 (draft) 
-- Owner: Fazri Gading 
-- Status: Ready for build planning 
+- **Version**: 1.0 (Ready for Build)
+- **Owner**: Fazri Gading
+- **Status**: Approved for Implementation
+- **Repository**: [fazrigading/GanodermaScout](https://github.com/fazrigading/GanodermaScout)
 
-## 1. Overview
+---
 
-GanodermaScout takes a photo of an oil palm base and a free-text question. It detects Ganoderma boninense fruiting bodies, labels each as a primordium or a mature basidiocarp, and returns a management recommendation that cites agronomy sources. The system keeps a history for each palm and plantation block, so it can describe how infection changes over time. An evaluation harness compares detection models, retrieval strategies, and memory on or off.
+## 1. Executive Summary
 
-This is a portfolio project. It shows that one engineer can design, build, deploy, and evaluate a multi-service AI system on real domain data. It is a working MVP and demo, not a commercial release.
+### Problem Statement
+Basal Stem Rot (BSR) caused by *Ganoderma boninense* destroys oil palm productivity and tree longevity, yet manual field scouting remains slow, inconsistent, and disconnected from verified agronomic intervention protocols. Field teams lack automated visual staging and reliable, cited management recommendations at the point of inspection.
 
-## 2. Goals and non-goals
+### Proposed Solution
+GanodermaScout is an end-to-end multi-service AI decision-support system that detects and stages *Ganoderma* fruiting bodies (primordium vs. mature basidiocarp) from palm base photographs, tracks historical progression per palm and plantation block, and generates verified agronomic management recommendations grounded strictly in scientific literature via a multi-agent LangGraph workflow.
 
-### Goals
+### Success Criteria
+1. **Detection Quality**: Mature basidiocarp Recall@IoU0.5 $\ge 0.88$ and overall mAP@50 $\ge 0.82$ on a site-disjoint holdout test set across benchmarked detector models.
+2. **Retrieval & Citation Precision**: Citation precision $\ge 0.90$ with 0% ungrounded chemical dosage hallucinations in recommendation outputs.
+3. **Safety Verification**: Safety filter block rate $\ge 0.95$ on adversarial prompts (unsupported chemical dosages, off-label treatments, prompt injections).
+4. **Latency & Reliability**: End-to-end p95 processing latency $\le 4.5\text{s}$ (GPU) / $\le 12.0\text{s}$ (8-core CPU); $\ge 99.0\%$ job completion rate across a 500-request load test.
+5. **Local Reproducibility**: 100% automated pass rate for smoke tests on local launch via a single `docker compose up` command using bundled sample data.
 
-1. Deliver an end-to-end flow from photo upload to a cited recommendation, running locally with one `docker compose up`.
-2. Show production patterns: an API gateway with OAuth, an async job queue with webhook callbacks, orchestrated data pipelines, experiment tracking, and monitoring.
-3. Benchmark four detector families (YOLOv12, YOLOv13, RT-DETRv3, RF-DETR), three retrieval modes (dense, hybrid, hybrid with reranker), and memory on versus off, and publish the results on a benchmark page.
-4. Produce a repository a reviewer can understand in ten minutes: architecture diagram, design doc, tradeoff notes, and a recorded demo.
+---
 
-### Non-goals
+## 2. User Experience & Functionality
 
-- Replacing a plantation pathologist or laboratory confirmation. The product is decision support.
-- Early detection from the trunk or canopy. The MVP detects visible fruiting bodies only.
-- Mobile apps, offline mode, and multi-language support.
-- Drone or satellite imagery.
-- Using every agent framework on the market. The project uses LangGraph and justifies the choice in the design doc.
+### User Personas
 
-## 3. Target users
-
-| Persona | Need | Primary use |
+| Persona | Role & Context | Primary Need |
 | --- | --- | --- |
-| Plantation field worker | Quick check of a palm and the next action | Upload photo, read result |
-| Plantation agronomist | Review detections, see spread across blocks, get cited guidance | Review history, confirm or correct detections |
-| Admin or ML engineer (also the hiring reviewer) | Inspect system health and model quality | Dashboards, benchmark page, experiment runs |
+| **Field Scout** | Plantation worker walking assigned blocks with camera/phone | Rapid capture validation, immediate detection bounding boxes, and field action instructions |
+| **Plantation Agronomist** | Estate specialist overseeing disease containment across blocks | Historical infection spread tracking, cited sanitary protocols, and model correction workflows |
+| **ML/Platform Reviewer** | Hiring manager or technical evaluator reviewing codebase | Clean architecture verification, benchmark reproducibility, and observable service metrics |
 
-## 4. Scope
+### User Stories & Acceptance Criteria
 
-### In scope for the MVP
+#### US-1: Palm Photo Submission & Ingestion
+*As a Field Scout, I want to submit a palm base photograph with block and palm identifiers so that the tree's health state is inspected.*
 
-- Image upload with a text question, tagged with a block and palm ID.
-- Detection and staging of fruiting bodies with bounding boxes.
-- Retrieval over a curated corpus on Ganoderma and basal stem rot management, with citations.
-- Per-palm and per-block memory of past detections.
-- Alerts when detections cross a configured threshold.
-- Evaluation harness and benchmark page.
-- Admin dashboard for service health and model metrics.
+- **AC 1.1**: The upload endpoint accepts JPEG and PNG formats up to 15 MB.
+- **AC 1.2**: Core API returns an HTTP 202 Accepted with a unique `job_id` within $\le 500\text{ms}$.
+- **AC 1.3**: Frontend uploads stream progress and receive status transitions (`queued`, `processing`, `completed`, `failed`) via Server-Sent Events (SSE) without page refresh.
+- **AC 1.4**: Client UI validates image capture quality against baseline bounds (blur score via Laplacian variance $> 100$, exposure within dynamic range thresholds) and requests a retake if bounds fail before job queuing.
 
-### Out of scope for the MVP
+#### US-2: Visual Detection & Staging
+*As a Field Scout or Agronomist, I want to view localized bounding boxes and developmental stages so that I know exactly where and how developed the infection is.*
 
-- Multi-tenant organizations, billing, and payments.
-- Real-time video.
-- Automated ordering of treatments or chemicals.
-- Disease types other than Ganoderma.
+- **AC 2.1**: The response renders bounding boxes color-coded by class: `primordium` (early stage) and `mature_basidiocarp` (developed conk).
+- **AC 2.2**: Each detection displays an explicit confidence score in $[0.00, 1.00]$.
+- **AC 2.3**: The UI provides a dynamic confidence threshold slider ($0.10$ to $0.90$ with $0.05$ increments) that updates visible boxes client-side in real time.
+- **AC 2.4**: If no fruiting bodies are detected with confidence above the threshold, the system displays an explicit disclaimer: *"No visible fruiting bodies detected. Note: Fruiting bodies are a late-stage symptom of BSR; internal trunk decay may still be active."*
 
-## 5. User stories and acceptance criteria
+#### US-3: Grounded Agronomic Recommendations
+*As a Plantation Agronomist, I want actionable disease management advice citing verified agronomic publications so that I can justify field sanitation decisions.*
 
-**US-1. Submit a palm photo.** As a field worker, I upload a photo and select a block and palm ID so that the palm is checked.
+- **AC 3.1**: Every factual agronomic claim links to an explicit source citation anchor referencing author, publication title, year, and passage ID.
+- **AC 3.2**: Recommendations distinguish actions based on stage: sanitation/mounding/monitoring for primordia versus immediate sanitation, isolation trenching, or controlled de-boling for mature basidiocarps.
+- **AC 3.3**: If confidence on detection is $< 0.60$, the recommendation flags the finding for secondary agronomist confirmation before applying physical treatments.
 
-- Accepts JPEG and PNG up to 15 MB.
-- Returns a job ID within 1 second.
-- The UI shows job status (queued, processing, done, failed) without a page reload.
-- The upload form shows capture guidance (distance, angle, lighting) taken from the project's own data collection protocol.
+#### US-4: Longitudinal Spread & Palm History
+*As a Plantation Agronomist, I want to review previous inspection records for a specific palm and block so that I can evaluate disease progression rate.*
 
-**US-2. See what was detected.** As a user, I see detections on the image.
+- **AC 4.1**: Palm history view shows an ordered visual timeline of all prior inspections, including dates, detection bounding boxes, and stage transitions.
+- **AC 4.2**: Block map/view aggregates total infected palms, distribution by stage, and new incidence count within the last 30/60/90 days.
+- **AC 4.3**: When memory toggle is active (`memory_enabled=true`), the recommendation text explicitly references prior inspection states (e.g., *"Palm B-12 transition from primordium observed 42 days ago to mature basidiocarp indicates active fungal expansion"*).
 
-- The result page draws bounding boxes labeled primordium or mature basidiocarp, each with a confidence score.
-- The user can toggle the confidence threshold and see boxes appear or disappear.
-- If image quality is too low (blur, glare, distance), the system asks for a new photo instead of reporting "no detection".
+#### US-5: Critical Incidence Alerting
+*As a Plantation Agronomist, I want instant alerts when mature fruiting bodies or cluster thresholds are breached so that field containment can begin immediately.*
 
-**US-3. Read a grounded recommendation.** As an agronomist, I read advice that cites sources.
+- **AC 5.1**: Detection of a `mature_basidiocarp` triggers an asynchronous webhook dispatch to n8n within $\le 30\text{s}$ of job completion.
+- **AC 5.2**: When block incidence exceeds a configurable limit (default: 3 infected palms within a 5-palm radius), an alert is pushed to configured Slack and email channels via n8n.
 
-- Each factual sentence links to at least one source passage.
-- The answer states that absence of visible fruiting bodies does not mean the palm is healthy, because fruiting bodies are generally a late sign. The agent must back this statement with a retrieved source.
-- Low confidence leads to a request for expert confirmation.
+#### US-6: Agronomist Feedback & Model Corrections
+*As an Agronomist, I want to correct false positives or adjust missed bounding boxes so that the ground-truth benchmark dataset can improve.*
 
-**US-4. Track progression.** As an agronomist, I see how a palm and its block change over time.
+- **AC 6.1**: The UI allows authenticated agronomists to edit, add, or delete bounding boxes and stage tags on any completed inspection.
+- **AC 6.2**: Edits are stored in an audit table (`detection_corrections`) with user ID, original detections, corrected annotations, and timestamp.
+- **AC 6.3**: An export API (`GET /api/v1/corrections/export`) emits formatted COCO/YOLO annotations ready for DVC versioning and model retraining.
 
-- A palm timeline shows each photo, its detections, and stage changes.
-- A block view shows counts of affected palms by date.
-- With memory on, the agent can mention a previous detection for the same palm in its answer.
+#### US-7: Evaluation Harness & Benchmark Dashboard
+*As an ML/Platform Reviewer, I want to compare model families, retrieval pipelines, and memory effects so that I can evaluate system trade-offs.*
 
-**US-5. Receive alerts.** As an agronomist, I get notified about serious findings.
+- **AC 7.1**: The harness runs automated test suites against a fixed, site-disjoint holdout set for:
+  - 4 object detectors: YOLOv12, YOLOv13, RT-DETRv3, RF-DETR.
+  - 3 retrieval pipelines: Dense only, Hybrid (BM25 + Dense RRF), Hybrid + Reranker (bge-reranker).
+  - Memory toggle: ON vs. OFF.
+- **AC 7.2**: The benchmark UI displays a Pareto frontier plot (mAP@50 vs. Inference Latency in ms) comparing all 4 detector models.
+- **AC 7.3**: Benchmark page renders comparative metric cards (Recall@50, mAP@50:95, MRR@5, Faithfulness, Citation Precision) with diff toggles against baseline.
 
-- A mature basidiocarp detection, or a block-level count above a configured threshold, triggers an n8n workflow that sends an email or Slack message within 60 seconds.
+#### US-8: Safety & Refusal Enforcement
+*As a Platform Reviewer, I want the system to reject harmful or unverified inputs so that no illegal or damaging agricultural practices are recommended.*
 
-**US-6. Correct a detection.** As an agronomist, I mark a detection as wrong or add a missed one.
+- **AC 8.1**: Verification agent checks every drafted recommendation against an explicit safety catalog (banned chemicals, unverified dosage numbers, off-label fungicides).
+- **AC 8.2**: If the drafting LLM generates dosage metrics not present in the retrieved passages, the verification agent triggers a strict rewrite removing all numerical dosage references.
+- **AC 8.3**: Adversarial prompt injections inside image metadata or user questions are blocked by guardrail filters without altering agent system prompts.
 
-- Corrections are stored and exported as a candidate set for the next evaluation set version.
+### Non-Goals
+- **Non-Goal 1**: Replacing professional laboratory pathogen isolation or certified agronomist diagnosis. GanodermaScout is strictly a decision-support and scouting triage tool.
+- **Non-Goal 2**: Asymptomatic or pre-visual early detection (trunk drilling, internal acoustic tomography, hyperspectral satellite/drone sensing).
+- **Non-Goal 3**: Native offline mobile applications (iOS/Android) or multi-tenant SaaS billing/subscription management.
+- **Non-Goal 4**: Automated chemical ordering, inventory procurement, or autonomous spray machinery dispatch.
+- **Non-Goal 5**: Detection of non-*Ganoderma* diseases (e.g., Upper Stem Rot, Curvularia leaf spot) outside of basic out-of-distribution visual rejection.
 
-**US-7. Run an evaluation.** As an engineer, I compare configurations.
+---
 
-- I select a detector, retrieval mode, memory flag, and prompt version, run it against the fixed test set, and see metrics in a table and charts.
-- Results are stored and comparable across runs.
+## 3. AI System Requirements
 
-**US-8. Safety check.** As a user, I do not receive unsafe advice.
+### Model & Tool Requirements
 
-- The verification agent blocks or rewrites recommendations with unsupported chemical dosages, banned substances, or claims without a source.
+#### 1. Computer Vision Detection Suite
+- **Model Registry & Frameworks**: PyTorch, Ultralytics, Hugging Face Transformers, MLflow Model Registry.
+- **Detector Architectures**:
+  - `YOLOv12` (ultralytics / edge real-time baseline)
+  - `YOLOv13` (cutting-edge CNN-attention hybrid)
+  - `RT-DETRv3` (real-time vision transformer)
+  - `RF-DETR` (receptive-field enhanced detection transformer)
+- **Input Resolution**: $640 \times 640$ px RGB normalized.
+- **Classes**: `primordium` (class 0), `mature_basidiocarp` (class 1).
+- **Pre-filtering**: OpenCV Laplacian variance blur filter (threshold $\sigma^2 < 100$) and luminance histogram clipping check.
 
-## 6. System architecture
+#### 2. Agent & LLM Orchestration
+- **Agent Framework**: LangGraph (stateful graph-based multi-agent execution).
+- **LLM Engine Compatibility (Dual-Mode)**:
+  - *Cloud Mode*: OpenAI API (`gpt-4o` / `gpt-4o-mini`) or Anthropic Claude API (`claude-3-5-sonnet`) / Google Gemini API.
+  - *Local Mode*: Ollama or vLLM running open-weight models (`llama-3.3-70b`, `qwen2.5-72b` or `qwen2.5-7b-instruct`).
+  - Provider selectable via standard environment variables (`LLM_PROVIDER`, `LLM_BASE_URL`, `LLM_MODEL`).
+- **Embedding Pipeline**:
+  - *Cloud Mode*: `text-embedding-3-small` (1536 dims).
+  - *Local Mode*: `BAAI/bge-small-en-v1.5` or `nomic-embed-text` (via Hugging Face / Ollama).
+  - Stored in `pgvector` with HNSW cosine distance indexing (`m=16`, `ef_construction=64`).
+- **Retrieval Pipeline**:
+  - Dense vector similarity search via `pgvector`.
+  - Sparse lexical search via PostgreSQL Full-Text Search (`tsvector` + `tsquery` using English/agronomy dictionary) or BM25.
+  - Reciprocal Rank Fusion (RRF) with constant $k=60$.
+  - Optional Cross-Encoder reranker: `BAAI/bge-reranker-base`.
 
-### Services
+#### 3. Agent Graph Topology
 
-| Service | Language | Responsibility |
+```
+                  ┌──────────────┐
+                  │ User Request │
+                  └──────┬───────┘
+                         │
+                         ▼
+                 [ 1. Router Agent ]
+                         │
+         ┌───────────────┼───────────────┐
+         ▼               ▼               ▼
+  [New Inspection] [History Query] [General Inquiry]
+         │               │               │
+         ▼               │               │
+  [2. Vision Agent]      │               │
+         │               │               │
+         └───────────────┼───────────────┘
+                         │
+                         ▼
+               [ 3. Memory Step ]
+            (Loads palm/block history)
+                         │
+                         ▼
+             [ 4. Retrieval Agent ]
+         (Dense / Hybrid / Rerank RAG)
+                         │
+                         ▼
+              [ 5. Synthesis Agent ]
+            (Drafts cited advisory)
+                         │
+                         ▼
+            [ 6. Verification Agent ]
+         (Checks citations, bans hallucinated
+          dosages, rejects injection)
+                         │
+           ┌─────────────┴─────────────┐
+           ▼                           ▼
+      [Approved]             [Violations Found]
+           │                           │
+           │                           ▼
+           │                   [Rewrite / Refuse]
+           │                           │
+           └─────────────┬─────────────┘
+                         │
+                         ▼
+                  [ Final Output ]
+```
+
+### Evaluation Strategy & Benchmarking
+
+#### 1. Datasets & Splits
+- **Image Dataset**: Custom annotated dataset of *Ganoderma* basidiocarps and primordia on oil palm bases.
+  - *Distribution Policy*: High-quality synthetic/curated sample dataset bundled in repo (`data/sample_dataset/`) for instant smoke testing.
+  - *Full Research Dataset*: Tracked via DVC with remote storage pointers to protect unpublished research findings.
+  - *Splits*: Site-disjoint train/val/test splits (plantations in the test set never appear in train or validation sets to ensure real-world generalization).
+- **Text Corpus**: 150+ open-access Agronomy publications, MPOB (Malaysian Palm Oil Board) guidance, and BSR management extension bulletins with complete CC-BY / open-access licensing metadata.
+- **Golden Evaluation Set**: 100 hand-verified image + question pairs with expert reference answers and designated ground-truth citation spans.
+- **Adversarial Safety Set**: 30 injection and safety test prompts (off-label chemical inquiries, lethal dosage calculations, prompt override injections).
+
+#### 2. Evaluation Metrics & Standards
+
+| Target Area | Evaluation Metric | Baseline / Target Threshold | Evaluation Method |
+| --- | --- | --- | --- |
+| **Object Detection** | mAP@50 | $\ge 0.82$ across all classes | COCO eval script on site-disjoint test set |
+| **Object Detection** | Recall@50 (Mature) | $\ge 0.88$ | COCO eval script on site-disjoint test set |
+| **Detection Speed** | Latency per frame | $\le 45\text{ms}$ (GPU) / $\le 300\text{ms}$ (CPU) | Averaged over 100 consecutive warm runs |
+| **Retrieval** | Hit@5, Recall@5, MRR | MRR $\ge 0.75$, Recall@5 $\ge 0.85$ | Evaluated against golden reference passages |
+| **Groundedness** | Faithfulness | Score $\ge 0.90$ | LLM-as-a-judge with deterministic rubric |
+| **Citation Precision**| Citation Accuracy | $\ge 0.92$ of citations link to valid passages | Programmatic parser matching citations to retrieved chunks |
+| **Safety Compliance** | Adversarial Block Rate | $\ge 0.95$ (29/30 minimum) | Automated execution over adversarial test suite |
+| **Memory Efficacy** | Delta Answer Quality | $+15\%$ context relevance on follow-ups | Pairwise blind LLM judge comparison (Memory ON vs OFF) |
+
+---
+
+## 4. Technical Specifications
+
+### Architecture Overview
+
+```
+                                [ Next.js Frontend ]
+                                          │
+                               (REST / SSE via OAuth)
+                                          ▼
+                             [ Go API Gateway (Port 8000) ]
+                               (Auth, Rate Limiting, Route)
+                                          │
+                                          ▼
+                       [ Core API Service (Python FastAPI) ]
+                                   │              │
+                    (Dispatches Job)              (Reads/Writes Data)
+                                   ▼                      ▼
+                         [ Redis Stream Queue ]  [ PostgreSQL + pgvector ]
+                                   │
+                                   ▼
+                      [ Asynchronous Worker Pool ]
+                                   │
+                  ┌────────────────┴────────────────┐
+                  ▼                                 ▼
+      [ Vision Service (FastAPI) ]       [ Agent Service (LangGraph) ]
+      (YOLO / RT-DETR / OpenCV)          (Router, RAG, Verifier)
+                  │                                 │
+                  └────────────────┬────────────────┘
+                                   │
+                           (Job Done Event)
+                                   │
+               ┌───────────────────┴───────────────────┐
+               ▼                                       ▼
+     [ Core API DB Callback ]             [ n8n Automation Engine ]
+               │                                       │
+     (Updates status & SSE)                 (Sends Slack / Email Alerts)
+```
+
+### Component Services Catalog
+
+| Component | Stack | Responsibilities |
 | --- | --- | --- |
-| API gateway | Go | OAuth 2.0, rate limiting, request routing, webhook dispatch |
-| Core API | Python (FastAPI) | Jobs, palm and block records, history, orchestration entry point |
-| Vision service | Python (FastAPI, PyTorch, OpenCV) | Image quality check and detection, exposed as a REST inference API with a selectable model |
-| Agent service | Python (LangGraph) | Multi-agent workflow (see below) |
-| Worker | Python | Consumes jobs from the queue and runs the pipeline |
-| Ingestion pipeline | Apache Airflow | Document ingestion, chunking, embedding refresh, weather data pull |
-| Automation | n8n | Alert workflows |
-| Frontend | Next.js (React, TypeScript) | Upload and chat UI, detection viewer, palm and block timelines, admin and benchmark pages |
+| **API Gateway** | Go (Gin / Chi) | OAuth 2.0 PKCE termination, IP/Token rate limiting (token bucket), reverse proxying, webhook signing. |
+| **Core API** | Python (FastAPI, SQLAlchemy) | CRUD for palms/blocks, inspection job creation, database orchestration, SSE streaming. |
+| **Vision Inference** | Python (FastAPI, PyTorch) | Model serving for YOLOv12/v13, RT-DETRv3, RF-DETR; image quality validation filter. |
+| **Agent Service** | Python (LangGraph) | Multi-agent state graph, memory hydration, hybrid retrieval, synthesis, verification. |
+| **Async Worker** | Python (Celery or Redis Streams Consumer) | Pulls inspection jobs from Redis, coordinates vision + agent execution, writes completion state. |
+| **Ingestion Pipeline** | Apache Airflow | Document crawler, chunking, embedding generator, vector sync to `pgvector`. |
+| **Automation Engine** | n8n | Alert routing workflows (mature basidiocarp alert $\to$ Slack webhook / SMTP notification). |
+| **Frontend UI** | Next.js 15 (React 19, TypeScript, Tailwind) | Field capture interface, interactive canvas bounding boxes, timeline charts, benchmark dashboard. |
+| **Observability** | Prometheus & Grafana | Scraping metrics from all services (latencies, queue lag, error rates, model confidence). |
 
-### Data stores
+### Integration Points & Data Contracts
 
-- Postgres with pgvector for relational data (blocks, palms, images, detections), document chunks, and embeddings.
-- Redis for the job queue (Redis Streams) and caching.
-- Object storage (MinIO locally, S3-compatible) for images.
-- MLflow for experiment tracking and the model registry, and DVC for datasets and model files.
+#### 1. REST API Contract
+- `POST /api/v1/inspections`: Accepts `multipart/form-data` with `image` (binary), `block_id` (string), `palm_id` (string), `question` (optional text), `detector_model` (optional enum), `memory_enabled` (boolean). Returns `202 Accepted` with `{"job_id": "uuid", "status": "queued"}`.
+- `GET /api/v1/inspections/{job_id}`: Returns current status, bounding boxes, stage determinations, cited recommendations, and execution metadata.
+- `GET /api/v1/inspections/{job_id}/events`: Server-Sent Events stream for real-time state updates (`queued` $\to$ `analyzing_image` $\to$ `retrieving_docs` $\to$ `verifying` $\to$ `completed`).
+- `GET /api/v1/blocks/{block_id}/timeline`: Returns historical aggregated detection counts by date and stage.
+- `GET /api/v1/benchmark/summary`: Returns latest test set evaluation metrics across detector and RAG configurations.
 
-### Agent workflow (LangGraph)
+#### 2. Data Stores Schema
+- **PostgreSQL 16 with pgvector extension**:
+  - `plantations`, `blocks`, `palms`: Physical hierarchy.
+  - `inspections`: `id`, `palm_id`, `image_url`, `status`, `created_at`.
+  - `detections`: `id`, `inspection_id`, `class_name`, `confidence`, `bbox_x_min`, `bbox_y_min`, `bbox_x_max`, `bbox_y_max`.
+  - `recommendations`: `id`, `inspection_id`, `response_text`, `model_name`, `citations_json`, `verification_status`.
+  - `document_chunks`: `id`, `document_id`, `content`, `metadata_json`, `embedding` (vector(1536)).
+  - `detection_corrections`: `id`, `inspection_id`, `corrected_by`, `original_bbox`, `corrected_bbox`, `created_at`.
+- **Redis 7**:
+  - Stream `stream:inspection_jobs`: Task queue for workers.
+  - Key-value cache with TTL for session state and rate limit counters.
+- **MinIO (Local S3-Compatible Object Store)**:
+  - Bucket `ganodermascout-images`: Raw uploads and annotated thumbnail overlays.
 
-1. **Router agent** classifies the request (new inspection, history question, general management question).
-2. **Vision agent** calls the vision service and summarizes detections together with the user's question.
-3. **Memory step** loads the palm's and block's recent detections when memory is enabled.
-4. **Retrieval agent** runs the configured retrieval mode and returns passages with source IDs.
-5. **Answer agent** drafts the recommendation using only retrieved passages and detection data.
-6. **Verification agent** checks citations and safety rules, then approves, rewrites, or rejects.
+### Security, Privacy & Reliability
+- **Authentication & RBAC**:
+  - Go Gateway validates JWT tokens signed by OAuth 2.0 provider.
+  - Scopes: `scout:write` (upload inspections), `agronomist:review` (submit corrections), `admin:read` (view metrics & benchmarks).
+- **Network Isolation**: All internal microservices (Vision, Agent, Postgres, Redis, Airflow) communicate inside an isolated internal Docker bridge network; only Go Gateway and Next.js frontend expose host ports.
+- **Input Validation**: Strict MIME-type checking (magic byte inspection), image dimension bounds check, and request body size limits enforced at the gateway.
+- **Job Reliability**: Redis stream consumer groups with manual acknowledgments; automatic retry with exponential backoff up to 3 attempts before dead-letter queue routing (`stream:inspection_dlq`).
 
-### Request flow
+---
 
-1. The frontend sends the image, block, palm ID, and question to the Go gateway with an OAuth access token.
-2. The gateway forwards the request to the Core API, which stores the image, creates a job, and pushes it to the queue.
-3. A worker calls the vision service and the agent workflow.
-4. The result is saved to Postgres, and the gateway sends a webhook callback. The frontend also receives it through server-sent events.
-5. If the alert rule matches, the Core API calls an n8n webhook.
+## 5. Risks & Phased Roadmap
 
-## 7. Functional requirements
+### Phased Rollout Plan
 
-### Vision service
+```
+MVP (Portfolio Release)         v1.1 (Operational Hardening)       v2.0 (Field Operations)
+- Single `docker compose up`    - Batch image upload per block     - Edge-device model quantization
+- 4 Detectors evaluated         - Multi-user RBAC & SSO            - Offline sync PWA
+- Dual-mode LLM (Cloud/Local)   - Automated Airflow corpus update  - Weather & soil data integration
+- Benchmark & admin dashboards  - Advanced A/B prompt routing      - Active learning pipeline
+```
 
-- FR-V1. Serve a `/detect` endpoint that accepts an image and a model name, and returns boxes, classes (primordium, mature basidiocarp), and confidence scores.
-- FR-V2. Run an image quality check (blur, exposure, apparent distance) and return a quality flag before detection.
-- FR-V3. Load models from the MLflow registry. At least four are registered: YOLOv12, YOLOv13, RT-DETRv3, and RF-DETR.
-- FR-V4. Report inference latency per request so the benchmark page can compare precision against speed.
+#### Phase 1: MVP Core (Current Target)
+- Complete single-command local deployment with Docker Compose (`docker compose up`).
+- Functional multi-service pipeline: Go Gateway, Core API, Vision Inference with 4 models, LangGraph Agent with dual-mode LLM, Redis stream queue, and Next.js frontend.
+- Bundled sample image dataset + pre-indexed agronomic knowledge base.
+- Comprehensive benchmark dashboard presenting detection Pareto frontier and RAG comparative metrics.
 
-### Retrieval and knowledge base
+#### Phase 2: v1.1 Operational Hardening
+- Batch upload capability for entire plantation row scouts.
+- Multi-user authentication with estate-level data partitioning.
+- Automated weekly Airflow DAG to ingest newly published open-access agronomy literature.
+- Automated regression test pipeline on every Git tag release.
 
-- FR-R1. Ingest open-access PDFs and HTML pages on Ganoderma and basal stem rot, with metadata (title, publisher, year, URL, license).
-- FR-R2. Chunk, embed, and store the documents in pgvector.
-- FR-R3. Support three retrieval modes selectable by configuration: dense only, hybrid (BM25 plus dense with rank fusion), and hybrid plus reranker.
-- FR-R4. Return source IDs and passage offsets so the UI can link citations.
+#### Phase 3: v2.0 Plantation Deployment
+- TensorRT / ONNX Runtime quantization for edge inference on low-power plantation hardware.
+- Offline Progressive Web App (PWA) allowing scouts to queue uploads while out of cellular range.
+- Environmental correlation pipeline combining rainfall, soil humidity, and BSR spread velocity.
 
-### Memory
+### Technical & Project Risks and Mitigations
 
-- FR-M1. Store every completed inspection against a palm ID and block ID.
-- FR-M2. Provide a per-request memory toggle, which the evaluation harness uses.
-
-### Gateway and APIs
-
-- FR-G1. Implement OAuth 2.0 (authorization code flow with PKCE for the frontend, client credentials for service callers).
-- FR-G2. Rate limit per client.
-- FR-G3. Document the REST API with OpenAPI and sign webhooks for job completion.
-- FR-G4. Optional stretch: a read-only GraphQL endpoint for history queries.
-
-### Evaluation harness
-
-- FR-E1. Keep a versioned test set with labeled images (boxes and stages), questions, and reference answers.
-- FR-E2. Run a configuration (detector, retrieval mode, memory flag, prompt version) over the test set and log results to MLflow.
-- FR-E3. Compute the metrics in section 9.
-- FR-E4. Show comparison tables and charts on the benchmark page, including a precision against latency plot for the detectors.
-- FR-E5. Support a simple A/B mode that routes a share of live requests to a second configuration and logs both outcomes.
-
-### Frontend
-
-- FR-F1. Upload page with image preview, block and palm selectors, question box, and job status.
-- FR-F2. Result page with an image viewer that draws boxes, a threshold slider, the recommendation, and clickable citations.
-- FR-F3. Palm timeline and block summary pages.
-- FR-F4. Admin page with service health, latency, queue depth, and registered model versions.
-- FR-F5. Benchmark page described in FR-E4.
-
-## 8. Data
-
-### Image data
-
-Use the project's own annotated images of Ganoderma fruiting bodies at oil palm bases, collected with the documented acquisition setup. Record the camera, lens, distance range, and lighting conditions in the dataset card. For field testing, hold out images from plots or sites that do not appear in training, because same-site splits overstate performance.
-
-Before publishing anything, confirm that the data and trained weights may be released without conflicting with the planned paper. If needed, publish a small sample set and keep the full data private. The repo must still run end to end on the sample set.
-
-### Text corpus
-
-Collect open-access sources on Ganoderma and basal stem rot: research papers, plantation board guidance, and extension material. Aim for 100 to 300 documents. Keep source metadata and licenses for every document so each citation is verifiable.
-
-### Evaluation set
-
-- Labeled detection images with a site-disjoint split from training.
-- At least 100 image-question pairs with hand-written reference answers and the supporting passages marked.
-- A small adversarial subset for safety tests (dosage requests, prompt injection text in questions).
-- Versioned with DVC.
-
-## 9. Evaluation and success metrics
-
-| Area | Metric | MVP target |
-| --- | --- | --- |
-| Detection | mAP@50, mAP@50:95, and per-class AP and recall (primordium and mature) on the site-disjoint set | Report all four models. Recall on mature basidiocarps is the headline, and the targets come from your paper's baseline |
-| Detection speed | Latency per image on CPU and on one GPU | Publish the numbers with the precision-latency plot |
-| Retrieval | Recall@5 and MRR against marked passages | Hybrid plus reranker beats dense only by a measured margin |
-| Answer quality | Faithfulness (claims supported by retrieved passages) and citation precision | At least 0.90 citation precision |
-| Safety | Share of unsafe test prompts blocked by the verification agent | At least 0.95 on the adversarial subset |
-| Memory | Answer quality difference with memory on versus off on follow-up cases | Report the difference, including cases where memory hurts |
-| System | p95 end-to-end latency for one image | Publish the number from a local run |
-| System | Job success rate over a 500-request load test | At least 99 percent |
-
-The LLM judge for faithfulness uses a fixed rubric. Check a sample of judged results by hand and report agreement.
-
-## 10. Non-functional requirements
-
-- **Deployability.** The full stack starts with Docker Compose. Kubernetes manifests (kind or minikube) are a stretch goal.
-- **Observability.** Each service exposes Prometheus metrics. Grafana dashboards cover latency, error rate, queue depth, and detection confidence distribution. Requests carry a trace ID across services.
-- **Security.** No secrets in the repo. Uploads are validated by type and size. Prompt-injection text in documents or questions must not change system instructions, and the test set includes such cases.
-- **Reliability.** Jobs retry with backoff, failed jobs go to a dead-letter queue, and webhook delivery is idempotent.
-- **Reproducibility.** Pinned dependencies, seeded training runs, and one documented command that rebuilds the benchmark results.
-- **CI/CD.** GitHub Actions runs linting, unit tests, a small evaluation smoke test on the sample set, and image builds on each pull request.
-
-## 11. Ethics and responsible use
-
-- The UI states that results are decision support and shows confidence honestly.
-- The system never reports a palm as healthy based on missing detections. It states the limits of the method.
-- The system refuses to give treatment or chemical dosage numbers unless a retrieved source supplies them for this disease and crop, and it shows that source.
-- Agronomist corrections are stored and feed the next evaluation set version.
-- The repo documents known failure modes, such as other fungi that resemble fruiting bodies, partial occlusion by debris, and the bias of the data toward the sites where it was collected.
-
-## 12. Milestones
-
-| Phase | Deliverables | Exit check |
-| --- | --- | --- |
-| 1. Foundation | Vision service with one detector, Postgres with pgvector, basic dense RAG, simple UI, Docker Compose | A palm photo returns boxes and a cited answer locally |
-| 2. Agents and services | LangGraph workflow, Redis queue, worker, Go gateway with OAuth, webhooks, palm and block records | The full async flow works and history is saved |
-| 3. Data and MLOps | Four detectors in MLflow, Airflow ingestion, DVC, n8n alerts, evaluation harness, benchmark page | Detectors, retrieval modes, and memory on or off compared in tables |
-| 4. Hardening | Prometheus and Grafana, load test, safety tests, README, design doc, demo video | All section 9 metrics reported |
-| 5. Stretch | Kubernetes manifests, a cloud ML deployment, GraphQL history endpoint, BI dashboard export | Optional |
-
-## 13. Risks and mitigations
-
-| Risk | Impact | Mitigation |
-| --- | --- | --- |
-| Dataset cannot be shared because of paper timing or site agreements | Repo cannot be reproduced | Release a sample set, document the full dataset, and keep the pipeline runnable on the sample |
-| Detection performance drops on new sites | Weak demo and misleading claims | Site-disjoint evaluation, quality checks, and a low-confidence path |
-| Fruiting bodies are a late sign, so the product looks less useful | Reviewer questions the value | State the limit in the UI and README, and position the system as support for sanitation and block-level tracking |
-| Scope grows across too many services | Project never finishes | Ship phases in order and cut phase 5 before cutting the evaluation |
-| LLM judge is biased or noisy | Unreliable benchmark | Fixed rubric, hand-checked sample, reported agreement |
-| Corpus licensing problems | Cannot publish the repo | Use open-access sources only and record licenses |
-| Hallucinated advice | Harm to users and credibility | Retrieval-only answers, citation checks, verification agent, adversarial tests |
-
-## 14. Skills coverage map
-
-| Skill area from the target list | Where it appears in this project |
-| --- | --- |
-| Backend and API standards (REST, Webhooks, OAuth) | Go gateway, Core API, webhook callbacks |
-| Go as a secondary language | Gateway with auth and rate limiting |
-| ETL and orchestration | Airflow ingestion and embedding refresh |
-| Postgres and vector databases | pgvector with hybrid search |
-| Transformers, Hugging Face, OpenCV | Vision service with transformer detectors (RT-DETRv3, RF-DETR) and image quality checks |
-| LLM frameworks, multi-agent design, memory | LangGraph workflow, per-palm and per-block memory |
-| RAG and hybrid search experiments | Evaluation harness and benchmark page |
-| Docker, CI/CD, Kubernetes | Compose stack, GitHub Actions, optional manifests |
-| MLflow, DVC, monitoring, A/B testing | Model registry, dataset versioning, Grafana, FR-E5 |
-| Workflow automation | n8n alerts |
-| Ethical AI and safety | Verification agent, refusal rules, documented failure modes |
-
-## 15. Naming and repository
-
-The project name is GanodermaScout. "Scout" is the plantation term for walking blocks to inspect palms. Service and repository names use the lowercase prefix `ganodermascout`, for example `ganodermascout-gateway`, `ganodermascout-vision`, `ganodermascout-agents`, `ganodermascout-eval`, and `ganodermascout-web`. Before publishing, confirm the GitHub name and a matching domain are free.
-
-## 16. Open questions
-
-1. How much of the dataset and which trained weights can be published before the paper is accepted?
-2. Do the images include palm or block identifiers and GPS tags, or do they need to be assigned during setup?
-3. Which LLM provider and embedding model will you use, and what is the budget for benchmark runs?
-4. Is a hosted public demo needed, or are a local setup and a recorded video enough?
+| Risk Factor | Probability | Impact | Mitigation Strategy |
+| --- | --- | --- | --- |
+| **Dataset IP / Paper Embargo** | High | High | Keep full dataset private via DVC; ship synthetic and approved sample datasets in repo so full stack runs out-of-the-box without violating publication rights. |
+| **Out-of-Distribution Domain Shift** | High | High | Enforce site-disjoint evaluation; implement pre-inference image quality checks and explicit low-confidence escalation routes. |
+| **Symptom Staging Misunderstanding** | Medium | High | Explicit disclaimers in UI that absence of conks does not equal a healthy palm, backed by retrieved agronomic citations explaining internal decay latency. |
+| **LLM Hallucination of Chemicals** | High | Critical | Multi-agent verification barrier: strictly block and rewrite any response containing chemical dosages or brand names not found verbatim in retrieved sources. |
+| **Service Sprawl Complexity** | Medium | Medium | Strict modular Docker Compose configuration; each service includes standalone unit/mock tests to enable independent local development. |
+| **Local LLM Performance Bottlenecks** | Medium | Medium | Provide seamless dual-mode configuration: light cloud API mode for immediate quick testing vs. local Ollama/vLLM mode for air-gapped evaluation. |
