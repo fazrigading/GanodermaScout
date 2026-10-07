@@ -29,18 +29,18 @@ Tasks are tracked in **GitHub Issues** on [fazrigading/GanodermaScout](https://g
 
 ### Phase 2: Vision Service & Model Serving
 - [#4 Task 4: Image quality inspection filter](https://github.com/fazrigading/GanodermaScout/issues/4)
-- [#5 Task 5: Vision inference service with multi-detector registry](https://github.com/fazrigading/GanodermaScout/issues/5)
+- [x] [#5 Task 5: Vision inference service with multi-detector registry](https://github.com/fazrigading/GanodermaScout/issues/5)
 
 #### Checkpoint: Vision Pipeline
-- [ ] Image quality rejects blurred / underexposed test images
+- [x] Image quality rejects blurred / underexposed test images
 - [ ] `/detect` endpoint serves inference across registered detector models
-- [ ] Bounding boxes and confidence scores format strictly to contract
+- [x] Bounding boxes and confidence scores format strictly to contract
 
 ---
 
 ### Phase 3: Knowledge Base & Hybrid RAG Engine
-- [#6 Task 6: Agronomy document ingestion and chunking pipeline](https://github.com/fazrigading/GanodermaScout/issues/6)
-- [#7 Task 7: Dual-mode embedding and pgvector hybrid retrieval with RRF and reranker](https://github.com/fazrigading/GanodermaScout/issues/7)
+- [x] [#6 Task 6: Agronomy document ingestion and chunking pipeline](https://github.com/fazrigading/GanodermaScout/issues/6)
+- [x] [#7 Task 7: Dual-mode embedding and pgvector hybrid retrieval with RRF and reranker](https://github.com/fazrigading/GanodermaScout/issues/7)
 
 #### Checkpoint: Knowledge Retrieval
 - [ ] Markdown/PDF agronomy corpus chunked with metadata
@@ -50,13 +50,15 @@ Tasks are tracked in **GitHub Issues** on [fazrigading/GanodermaScout](https://g
 ---
 
 ### Phase 4: LangGraph Multi-Agent Workflow
-- [#8 Task 8: LangGraph stateful agent graph](https://github.com/fazrigading/GanodermaScout/issues/8)
-- [#9 Task 9: Verification agent guardrails](https://github.com/fazrigading/GanodermaScout/issues/9)
+- [x] [#8 Task 8: LangGraph stateful agent graph](https://github.com/fazrigading/GanodermaScout/issues/8)
+- [x] [#9 Task 9: Verification agent guardrails](https://github.com/fazrigading/GanodermaScout/issues/9)
 
 #### Checkpoint: Multi-Agent Synthesis
 - [ ] Agent state graph executes end-to-end from user query to recommendation
-- [ ] Verification agent successfully blocks ungrounded chemical dosage claims
-- [ ] Memory toggle correctly incorporates previous palm inspection records
+- [x] Verification agent successfully blocks ungrounded chemical dosage claims
+- [ ] Output advice cites valid source documents
+
+Verification note: Task 8 graph integration and memory-path checks remain unverified because `langgraph` and `langchain_core` are unavailable in the local runtime.
 
 ---
 

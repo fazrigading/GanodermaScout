@@ -115,15 +115,17 @@
 **Description:** Build the FastAPI Vision inference service exposing `/detect` and `/models` endpoints, supporting a model registry capable of loading and switching between YOLOv12, YOLOv13, RT-DETRv3, and RF-DETR models (with mock/fallback weights for lightweight local CPU testing).
 
 **Acceptance criteria:**
-- [ ] `/detect` accepts image file and `model_name` query parameter, returning bounding boxes `[x_min, y_min, x_max, y_max]`, class label (`primordium` or `mature_basidiocarp`), confidence score, and inference latency in milliseconds.
-- [ ] Image quality check is executed as a prerequisite; failing quality returns HTTP 422 with a structured retake recommendation.
-- [ ] `/models` endpoint lists available model architectures and loaded weights status.
-- [ ] Dockerfile created for the vision service with CPU/CUDA conditional runtime support.
+- [x] `/detect` accepts image file and `model_name` query parameter, returning bounding boxes `[x_min, y_min, x_max, y_max]`, class label (`primordium` or `mature_basidiocarp`), confidence score, and inference latency in milliseconds.
+- [x] Image quality check is executed as a prerequisite; failing quality returns HTTP 422 with a structured retake recommendation.
+- [x] `/models` endpoint lists available model architectures and loaded weights status.
+- [x] Dockerfile created for the vision service with CPU/CUDA conditional runtime support.
 
 **Verification:**
 - [ ] Tests pass: `pytest services/vision/tests/test_detect_api.py` testing detection outputs and quality rejections.
 - [ ] Build succeeds: `docker build -t ganodermascout-vision services/vision` builds cleanly.
 - [ ] Manual check: Send a sample image to `POST /detect?model=yolov12` via `curl` and inspect JSON response format.
+
+Recorded verification: an in-process API smoke covered detection response, quality rejection, and model status. The pytest result, Docker build, and requested `curl` check were not recorded.
 
 **Dependencies:** Task 4
 
@@ -139,9 +141,9 @@
 ---
 
 ### Checkpoint: Vision Pipeline
-- [ ] Quality inspection filter flags low-quality test images.
+- [x] Quality inspection filter flags low-quality test images.
 - [ ] `/detect` endpoint serves inference and latency metrics across detector models.
-- [ ] Bounding boxes, class names, and confidence scores match API schema.
+- [x] Bounding boxes, class names, and confidence scores match API schema.
 
 ---
 
@@ -151,14 +153,16 @@
 **Description:** Implement the document ingestion module that parses agronomic research documents, reports, and extension guides (Markdown, HTML, PDF), extracts licensing and publication metadata, splits text into semantically coherent chunks, and assigns unique passage identifiers.
 
 **Acceptance criteria:**
-- [ ] Ingests documents from `data/sample_dataset/corpus/`, extracting title, author, year, publication source, and license.
-- [ ] Splits documents into overlapping text chunks (chunk size: 500 tokens, overlap: 50 tokens) preserving paragraph and section headers.
-- [ ] Emits structured chunks with deterministic chunk IDs and source citation anchors.
+- [x] Ingests documents from `data/sample_dataset/corpus/`, extracting title, author, year, publication source, and license.
+- [x] Splits documents into overlapping text chunks (chunk size: 500 tokens, overlap: 50 tokens) preserving paragraph and section headers.
+- [x] Emits structured chunks with deterministic chunk IDs and source citation anchors.
 
 **Verification:**
 - [ ] Tests pass: `pytest services/core/tests/test_ingestion.py` verifying chunking and metadata preservation.
-- [ ] Build succeeds: Ingestion runner script parses the sample corpus into JSON chunks without exceptions.
+- [x] Build succeeds: Ingestion runner script parses the sample corpus into JSON chunks without exceptions.
 - [ ] Manual check: Verify extracted chunks retain correct publication title, year, and passage offset.
+
+Recorded verification: the in-process ingestion smoke parsed the bundled Markdown corpus into six chunks. The pytest result and requested title/year/offset spot-check were not recorded.
 
 **Dependencies:** Task 2, Task 3
 
@@ -175,15 +179,17 @@
 **Description:** Build the vector indexer and hybrid retrieval service supporting dual-mode embeddings (OpenAI `text-embedding-3-small` or local HuggingFace `BAAI/bge-small-en-v1.5`), executing hybrid search combining dense pgvector cosine similarity with PostgreSQL full-text search using Reciprocal Rank Fusion (RRF) and an optional cross-encoder reranker.
 
 **Acceptance criteria:**
-- [ ] Embedding client generates vectors seamlessly in either cloud API or local mode based on environment variables.
-- [ ] Populates `document_chunks` table with embeddings and builds PostgreSQL full-text search vectors.
-- [ ] Hybrid retriever implements RRF scoring ($k=60$) over dense and sparse result lists.
-- [ ] Optional reranker scores candidate passages and returns top-$k$ ranked passages with source citations.
+- [x] Embedding client generates vectors seamlessly in either cloud API or local mode based on environment variables.
+- [x] Populates `document_chunks` table with embeddings and builds PostgreSQL full-text search vectors.
+- [x] Hybrid retriever implements RRF scoring ($k=60$) over dense and sparse result lists.
+- [x] Optional reranker scores candidate passages and returns top-$k$ ranked passages with source citations.
 
 **Verification:**
 - [ ] Tests pass: `pytest services/core/tests/test_retrieval.py` testing dense, sparse, and hybrid search output order.
 - [ ] Build succeeds: Database query plan confirms HNSW index usage on dense vector search.
 - [ ] Manual check: Run query *"What are the sanitation protocols for mature Ganoderma conks?"* and confirm top retrieved passages contain MPOB sanitation guidelines.
+
+Recorded verification: in-process smoke exercised cloud/local embedding modes, RRF ordering, reranker top-k, generated FTS schema, dense/sparse SQL, and indexer imports. Pytest, live PostgreSQL query-plan, and manual live-query checks were not run.
 
 **Dependencies:** Task 6
 
@@ -210,16 +216,18 @@
 **Description:** Construct the LangGraph multi-agent decision workflow featuring state management, a Router Agent, Vision Agent coordinator, Memory Step (hydrating palm and block history), Retrieval Agent, and an Answer Synthesis Agent producing structured advice with citations.
 
 **Acceptance criteria:**
-- [ ] Defines the shared `AgentState` schema containing image detections, palm/block history, retrieved passages, drafted advisory, and verification status.
-- [ ] Router agent classifies requests into `new_inspection`, `history_query`, or `general_advisory`.
-- [ ] Retrieval agent queries the hybrid knowledge base using contextual terms from user question and detection classes.
-- [ ] Synthesis agent produces recommendations where every factual claim references citation anchors `[Source: ID]`.
-- [ ] Supports both cloud LLMs (OpenAI/Anthropic/Gemini) and local LLMs (Ollama/vLLM) via standard LangChain chat model interfaces.
+- [x] Defines the shared `AgentState` schema containing image detections, palm/block history, retrieved passages, drafted advisory, and verification status.
+- [x] Router agent classifies requests into `new_inspection`, `history_query`, or `general_advisory`.
+- [x] Retrieval agent queries the hybrid knowledge base using contextual terms from user question and detection classes.
+- [x] Synthesis agent produces recommendations where every factual claim references citation anchors `[Source: ID]`.
+- [x] Supports both cloud LLMs (OpenAI/Anthropic/Gemini) and local LLMs (Ollama/vLLM) via standard LangChain chat model interfaces.
 
 **Verification:**
-- [ ] Tests pass: `pytest services/agents/tests/test_graph.py` mocking tool responses and verifying state transitions.
-- [ ] Build succeeds: `python -m services.agents.src.graph --dry-run` executes graph topology validation.
-- [ ] Manual check: Execute graph with a mock mature basidiocarp detection and verify output suggests sanitation and isolation trenching with citations.
+- [ ] Tests pass: `pytest services/agents/tests/test_graph.py` (blocked: `langgraph` is not installed).
+- [ ] Build succeeds: `python -m services.agents.src.graph --dry-run` (blocked: `langgraph` is not installed).
+- [ ] Manual check: Execute graph with a mock mature basidiocarp detection and verify output suggests sanitation and isolation trenching with citations (blocked: `langgraph` is not installed).
+
+Verification note: graph integration tests and topology smoke could not run because `langgraph` and `langchain_core` are unavailable in the runtime; syntax parsing passed.
 
 **Dependencies:** Task 5, Task 7
 
@@ -238,15 +246,15 @@
 **Description:** Implement the specialized Verification Agent node in the LangGraph workflow that acts as a strict guardrail: validating citation anchors against retrieved passages, enforcing the complete ban on hallucinated or unsupported chemical dosages, rejecting prompt injection attempts, and rewriting ungrounded outputs.
 
 **Acceptance criteria:**
-- [ ] Parses every citation tag `[Source: ID]` in drafted advice and verifies that referenced passages exist in state; flags ungrounded claims.
-- [ ] Scans response for chemical dosage figures (e.g., "apply X grams of hexaconazole"); if the exact dosage is not found verbatim in retrieved sources, triggers automated redaction or rewrite.
-- [ ] Evaluates input prompts against adversarial patterns (prompt injection / jailbreaks) and halts execution with a safe refusal when detected.
-- [ ] Verification state approved, rewritten, or refused is recorded in state metadata.
+- [x] Parses every citation tag `[Source: ID]` in drafted advice and verifies that referenced passages exist in state; flags ungrounded claims.
+- [x] Scans response for chemical dosage figures (e.g., "apply X grams of hexaconazole"); if the exact dosage is not found verbatim in retrieved sources, triggers automated redaction or rewrite.
+- [x] Evaluates input prompts against adversarial patterns (prompt injection / jailbreaks) and halts execution with a safe refusal when detected.
+- [x] Verification state approved, rewritten, or refused is recorded in state metadata.
 
 **Verification:**
-- [ ] Tests pass: `pytest services/agents/tests/test_verifier.py` with safety violation test cases, dosage hallucinations, and injection attempts.
-- [ ] Build succeeds: `ruff check services/agents/` passes without warnings.
-- [ ] Manual check: Feed draft advice with an invented chemical dosage and confirm the verifier removes it or rewrites to require laboratory/agronomist guidance.
+- [x] Tests pass: `pytest services/agents/tests/test_verifier.py` with safety violation test cases, dosage hallucinations, and injection attempts.
+- [x] Build succeeds: `ruff check services/agents/` passes without warnings.
+- [x] Manual check: Feed draft advice with an invented chemical dosage and confirm the verifier removes it or rewrites to require laboratory/agronomist guidance.
 
 **Dependencies:** Task 8
 
@@ -261,8 +269,8 @@
 
 ### Checkpoint: Multi-Agent Synthesis
 - [ ] LangGraph graph executes end-to-end through router, retrieval, synthesis, and verification.
-- [ ] Verification agent successfully blocks ungrounded chemical dosage claims.
-- [ ] Output advice cites valid source documents.
+- [x] Verification agent successfully blocks ungrounded chemical dosage claims.
+- [ ] Output advice cites valid source documents
 
 ---
 

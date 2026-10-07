@@ -60,7 +60,7 @@ def test_detection_and_recommendation_link():
 
 
 def test_document_chunk_vector_dim():
-    chunk = DocumentChunk(document_id="doc-1", content="text", metadata_json={}, embedding=[0.0] * 1536)
+    chunk = DocumentChunk(chunk_id="doc-1#p1", document_id="doc-1", content="text", metadata_json={}, embedding=[0.0] * 1536)
     assert len(chunk.embedding) == 1536
 
 
