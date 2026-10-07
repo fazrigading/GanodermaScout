@@ -15,3 +15,9 @@ Without configured weights, `/detect` returns HTTP 503 rather than inventing det
 ## Document ingestion
 
 The Core RAG ingestion module parses Markdown, HTML, and PDF documents from `data/sample_dataset/corpus/`, using `manifest.json` values when available and embedded document metadata otherwise. It writes JSON passage chunks to stdout by default; run `python -m services.core.src.rag.ingestion --corpus data/sample_dataset/corpus --output chunks.json` to save a file. Chunks use the `cl100k_base` tokenizer, default to 500 tokens with 50-token overlap for long sections, retain document/section headings, and include deterministic citation anchors and extracted-text offsets.
+
+## Hybrid retrieval
+
+The Core RAG indexer stores passage text, metadata, and 1536-dimensional embeddings in PostgreSQL; a generated English `tsvector` and GIN index support sparse search, while the existing HNSW cosine index serves dense search. `EMBEDDING_PROVIDER=huggingface` uses `EMBEDDING_MODEL` (default `BAAI/bge-small-en-v1.5`); `EMBEDDING_PROVIDER=openai` uses `OPENAI_EMBEDDING_MODEL` (default `text-embedding-3-small`) and `OPENAI_API_KEY`. Local 384-dimensional BGE vectors are zero-padded to the database's 1536 dimensions without changing cosine similarity. Retrieval combines dense and sparse rankings with RRF ($k=60$); optionally pass `CrossEncoderReranker` to rerank candidates.
+
+Apply the Core Alembic migrations before indexing. Run `python -m services.core.src.rag.indexer --corpus data/sample_dataset/corpus` with `DATABASE_URL` and the embedding configuration set to populate the index. `hybrid_retrieve` returns ranked passages with stable citation anchors.

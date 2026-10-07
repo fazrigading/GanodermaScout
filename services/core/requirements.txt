@@ -7,3 +7,5 @@ pytest>=8.0
 beautifulsoup4>=4.12
 pypdf>=5.0
 tiktoken>=0.7
+openai>=1.40
+sentence-transformers>=3.0

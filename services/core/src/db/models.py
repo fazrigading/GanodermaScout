@@ -5,6 +5,7 @@ from typing import Optional
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     JSON,
+    Computed,
     DateTime,
     Float,
     ForeignKey,
@@ -12,7 +13,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -107,10 +108,16 @@ class DocumentChunk(Base):
     __tablename__ = "document_chunks"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    chunk_id: Mapped[str] = mapped_column(String(512), nullable=False, unique=True)
     document_id: Mapped[str] = mapped_column(String(255), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     metadata_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     embedding: Mapped[Optional[list[float]]] = mapped_column(Vector(1536), nullable=True)
+    search_vector: Mapped[str] = mapped_column(
+        TSVECTOR,
+        Computed("to_tsvector('english', content)", persisted=True),
+        nullable=False,
+    )
 
 
 class DetectionCorrection(Base):
