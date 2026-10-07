@@ -15,6 +15,7 @@ from .nodes import (
     synthesis_node,
     vision_node,
 )
+from .guardrails import input_guard_node, verification_node
 from .state import AgentState
 
 
@@ -26,12 +27,23 @@ def build_graph(
     vision_client: VisionClient | None = None,
 ):
     workflow = StateGraph(AgentState)
+    workflow.add_node("input_guard", input_guard_node)
     workflow.add_node("router", router_node)
     workflow.add_node("vision", lambda state: vision_node(state, vision_client))
     workflow.add_node("memory", lambda state: memory_node(state, memory_store))
     workflow.add_node("retrieval", lambda state: retrieval_node(state, retriever))
     workflow.add_node("synthesis", lambda state: synthesis_node(state, model))
-    workflow.add_edge(START, "router")
+    workflow.add_node("verification", verification_node)
+    workflow.add_edge(START, "input_guard")
+    workflow.add_conditional_edges(
+        "input_guard",
+        lambda state: (
+            "refused"
+            if state["verification_status"] == "refused"
+            else "continue"
+        ),
+        {"continue": "router", "refused": END},
+    )
     workflow.add_conditional_edges(
         "router",
         lambda state: state["request_type"],
@@ -44,7 +56,8 @@ def build_graph(
     workflow.add_edge("vision", "memory")
     workflow.add_edge("memory", "retrieval")
     workflow.add_edge("retrieval", "synthesis")
-    workflow.add_edge("synthesis", END)
+    workflow.add_edge("synthesis", "verification")
+    workflow.add_edge("verification", END)
     return workflow.compile()
 
 
@@ -61,7 +74,15 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.dry_run:
         nodes = set(graph.get_graph().nodes)
-        required_nodes = {"router", "vision", "memory", "retrieval", "synthesis"}
+        required_nodes = {
+            "input_guard",
+            "router",
+            "vision",
+            "memory",
+            "retrieval",
+            "synthesis",
+            "verification",
+        }
         if not required_nodes.issubset(nodes):
             raise RuntimeError(f"Agent graph is missing nodes: {sorted(required_nodes - nodes)}")
         print(f"Agent graph valid: {', '.join(sorted(required_nodes))}")

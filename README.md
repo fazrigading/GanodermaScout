@@ -24,4 +24,8 @@ Apply the Core Alembic migrations before indexing. Run `python -m services.core.
 
 ## Stateful agent graph
 
-The LangGraph workflow routes inspections, history queries, and general advice; new-image requests call the Vision service, memory nodes load palm/block inspection history from PostgreSQL, and retrieval adds detection classes to the user query before dense/sparse search. Structured synthesis attaches only citation anchors present in retrieved passages. Configure `LLM_PROVIDER` as `openai`, `anthropic`, `gemini`, `ollama`, or `vllm`; provider SDKs implement LangChain chat-model interfaces. Run `python -m services.agents.src.graph --dry-run` to validate graph topology without contacting providers or databases.
+The LangGraph workflow routes inspections, history queries, and general advice; new-image requests call the Vision service, memory nodes load palm/block inspection history from PostgreSQL, and retrieval adds detection classes to the user query before dense/sparse search. Structured synthesis attaches only citation anchors present in retrieved passages.
+
+An input guard refuses known prompt-injection requests before vision, memory, or retrieval calls. A final verifier approves only citations found in retrieved passages and rewrites ungrounded claims or chemical dosage phrases not found verbatim in those passages. Verification status (`approved`, `rewritten`, or `refused`) is recorded in graph state.
+
+Configure `LLM_PROVIDER` as `openai`, `anthropic`, `gemini`, `ollama`, or `vllm`; provider SDKs implement LangChain chat-model interfaces. Run `python -m services.agents.src.graph --dry-run` to validate graph topology without contacting providers or databases.
